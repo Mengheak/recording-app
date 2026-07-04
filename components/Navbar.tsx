@@ -11,14 +11,14 @@ const Navbar = () => {
         <header className="navbar">
             <nav>
                 <Link href={"/"}>
-                    <Image alt={"Logo"} src={"/assets/icons/logo.svg"} width={32} height={32} />
+                    <Image alt={"Logo"} src={"/assets/icons/logo.svg"} width={32} height={32}/>
                     <h1 className={""}>SnapCast</h1>
                 </Link>
 
                 {
                     user && 
                     <figure>
-                        <button onClick={() => router.push('/profile/1222331123') }>
+                        <button onClick={() => router.push('/profile/1222331123') } className="rounded-full overflow-hidden">
                             <Image alt={"User Profile"} src={"/assets/images/dummy.jpg"} width={36} height={36} />
                         </button>
                         <button className={"cursor-pointer rotate-180"}>
