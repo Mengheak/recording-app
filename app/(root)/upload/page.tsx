@@ -3,10 +3,27 @@
 import FileInput from '@/components/FileInput'
 import FormField from '@/components/FormField'
 import { MAX_THUMBNAIL_SIZE, MAX_VIDEO_SIZE } from '@/constants'
+import { getThumbnailUploadUrl, getVideoUploadUrl, saveVideoDetails } from '@/lib/actions/video'
 import { useFileInput } from '@/lib/hooks/useFileInput'
-import React, { ChangeEvent, FormEvent, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import React, { ChangeEvent, FormEvent, useEffect, useState } from 'react'
+
+const uploadFileToBunny = (file: File, uploadUrl: string, accessKey: string): Promise<void> => {
+  return fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+      AccessKey: accessKey
+    },
+    body: file
+  }).then((response) => {
+    if (!response.ok) throw new Error("Upload failed")
+  })
+}
 
 const Page: React.FC = () => {
+  const router = useRouter()
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -16,6 +33,14 @@ const Page: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const video = useFileInput(MAX_VIDEO_SIZE)
   const thumbnail = useFileInput(MAX_THUMBNAIL_SIZE)
+  const [videoDuration, setVideoDuration] = useState(0)
+
+
+  useEffect(() => {
+    if (video.duration !== null || 0) {
+      setVideoDuration(video.duration)
+    }
+  }, [video.duration])
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -26,7 +51,7 @@ const Page: React.FC = () => {
       }
     })
   }
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
 
     setIsSubmitting(true)
@@ -39,6 +64,43 @@ const Page: React.FC = () => {
         setError("Please fill in all the details")
         return
       }
+
+      const {
+        videoId,
+        uploadUrl: videoUploadUrl,
+        accessKey: videoAccessKey
+      } = await getVideoUploadUrl()
+
+      if (!videoUploadUrl || !videoAccessKey) {
+        throw new Error("Failed to get video upload credentials")
+      }
+
+      await uploadFileToBunny(video.file, videoUploadUrl, videoAccessKey)
+
+
+      const {
+        uploadUrl: thumbnailUploadUrl,
+        accessKey: thumbnailAccessKey,
+        cdnUrl: thumbnailCdnUrl
+      } = await getThumbnailUploadUrl(videoId)
+
+
+      if (!thumbnailUploadUrl || !thumbnailAccessKey || !thumbnailCdnUrl) {
+        throw new Error("Failed to get thumbnail upload credentials")
+      }
+
+
+      await uploadFileToBunny(thumbnail.file, thumbnailUploadUrl, thumbnailAccessKey)
+
+
+      await saveVideoDetails({
+        videoId,
+        thumbnailUrl: thumbnailCdnUrl,
+        ...formData,
+        duration: videoDuration
+      })
+
+      router.push(`video/${videoId}`)
     } catch (e) {
       console.log("Error submitting form", e)
     } finally {
@@ -46,7 +108,7 @@ const Page: React.FC = () => {
     }
   }
   return (
-    <div className='wrapper upload-page'>
+    <div className='wrapper-md upload-page'>
       <h1></h1>
       {error && <div className='error-field'>
         {error}
