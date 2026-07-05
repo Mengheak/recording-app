@@ -2,11 +2,18 @@
 
 import { headers } from "next/headers";
 import { auth } from "../auth";
-import { apiFetch, getEnv, withErrorHandling } from "../utils";
+import {
+  apiFetch,
+  doesTitleMatch,
+  getEnv,
+  getOrderByClause,
+  withErrorHandling,
+} from "../utils";
 import { BUNNY } from "@/constants";
 import { db } from "@/drizzle/db";
-import { videos } from "@/drizzle/schema";
+import { user, videos } from "@/drizzle/schema";
 import { revalidatePath } from "next/cache";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 const VIDEO_STREAM_BASE_URL = BUNNY.STREAM_BASE_URL;
 const THUMBNAIL_STORAGE_BASE_URL = BUNNY.STORAGE_BASE_URL;
@@ -26,6 +33,16 @@ const getSessionUserId = async (): Promise<string> => {
 };
 const revalidatePaths = (paths: string[]) => {
   paths.forEach((path) => revalidatePath(path));
+};
+
+const buildVideoWithUserQuery = () => {
+  return db
+    .select({
+      video: videos,
+      user: { id: user.id, name: user.name, image: user.image },
+    })
+    .from(videos)
+    .leftJoin(user, eq(videos.userId, user.id));
 };
 //server actions
 export const getVideoUploadUrl = withErrorHandling(async () => {
@@ -84,8 +101,102 @@ export const saveVideoDetails = withErrorHandling(
       createdAt: now,
       updatedAt: now,
     });
-    console.log(videoDetails.thumbnailUrl);
     revalidatePaths(["/"]);
     return { videoId: videoDetails.videoId };
   },
+);
+
+export const getAllVideos = withErrorHandling(
+  async (
+    search: string = "",
+    sortFilter?: string,
+    pageNumber: number = 1,
+    pageSize: number = 8,
+  ) => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    const currentUserId = session?.user.id;
+
+    const visibilityCondition = or(
+      eq(videos.visibility, "public"),
+      eq(videos.userId, currentUserId!),
+    );
+
+    const whereCondition = search.trim()
+      ? and(visibilityCondition, doesTitleMatch(videos, search))
+      : visibilityCondition;
+
+    const [{ totalCount }] = await db
+      .select({
+        totalCount: sql<number>`count(*)`,
+      })
+      .from(videos)
+      .where(whereCondition);
+
+    const totalVideos = Number(totalCount || 0);
+    const totalPages = Math.ceil(totalVideos / pageSize);
+
+    const videoRecords = await buildVideoWithUserQuery()
+      .where(whereCondition)
+      .orderBy(
+        sortFilter
+          ? getOrderByClause(sortFilter)
+          : sql`${videos.createdAt} DESC`,
+      )
+      .limit(pageSize)
+      .offset((pageNumber - 1) * pageSize);
+
+    return {
+      videos: videoRecords,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalVideos,
+      },
+    };
+  },
+);
+
+export const getVideoById = withErrorHandling(async (videoId: string) => {
+  const [videoRecord] = await buildVideoWithUserQuery().where(
+    eq(videos.videoId, videoId),
+  );
+  return videoRecord;
+});
+
+export const getAllVideosByUser = withErrorHandling(
+  async (
+    userIdParameter: string,
+    searchQuery: string = "",
+    sortFilter?: string
+  ) => {
+    const currentUserId = (
+      await auth.api.getSession({ headers: await headers() })
+    )?.user.id;
+    const isOwner = userIdParameter === currentUserId;
+
+    const [userInfo] = await db
+      .select({
+        id: user.id,
+        name: user.name,
+        image: user.image,
+        email: user.email,
+      })
+      .from(user)
+      .where(eq(user.id, userIdParameter));
+    if (!userInfo) throw new Error("User not found");
+
+    const conditions = [
+      eq(videos.userId, userIdParameter),
+      !isOwner && eq(videos.visibility, "public"),
+      searchQuery.trim() && ilike(videos.title, `%${searchQuery}%`),
+    ].filter(Boolean) as any[];
+
+    const userVideos = await buildVideoWithUserQuery()
+      .where(and(...conditions))
+      .orderBy(
+        sortFilter ? getOrderByClause(sortFilter) : desc(videos.createdAt)
+      );
+
+    return { user: userInfo, videos: userVideos, count: userVideos.length };
+  }
 );

@@ -37,11 +37,41 @@ const Page: React.FC = () => {
 
 
   useEffect(() => {
-    if (video.duration !== null || 0) {
-      setVideoDuration(video.duration)
-    }
-  }, [video.duration])
+    const checkForRecordedVideo = async () => {
+      try {
+        const stored = sessionStorage.getItem("recordedVideo");
+        if (!stored) return;
 
+        const { url, name, type, duration } = JSON.parse(stored);
+        const blob = await fetch(url).then((res) => res.blob());
+        const file = new File([blob], name, { type, lastModified: Date.now() });
+
+        if (video.inputRef.current) {
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          video.inputRef.current.files = dataTransfer.files;
+
+          const event = new Event("change", { bubbles: true });
+          video.inputRef.current.dispatchEvent(event);
+
+          video.handleFileChange({
+            target: { files: dataTransfer.files },
+          } as ChangeEvent<HTMLInputElement>);
+        }
+
+        if (duration) setVideoDuration(duration);
+
+        sessionStorage.removeItem("recordedVideo");
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Error loading recorded video:", err);
+      }
+    };
+
+    checkForRecordedVideo();
+  }, [video]);
+
+  
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => {
@@ -100,7 +130,7 @@ const Page: React.FC = () => {
         duration: videoDuration
       })
 
-      router.push(`video/${videoId}`)
+      router.push(`/  `)
     } catch (e) {
       console.log("Error submitting form", e)
     } finally {

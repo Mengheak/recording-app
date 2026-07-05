@@ -2,6 +2,7 @@ import { ICONS } from '@/constants'
 import Image from 'next/image'
 import Link from 'next/link'
 import DropdownList from './DropdownList'
+import RecordScreen from './RecordScreen'
 
 const Header = ({ subHeader, title, userImg }: SharedHeaderProps) => {
     return (
@@ -9,7 +10,14 @@ const Header = ({ subHeader, title, userImg }: SharedHeaderProps) => {
             <section className='header-container'>
                 <div className="details">
                     {
-                        userImg && <Image src={userImg || "/assets/images/dummy.jpg"} alt="User Profile" width={66} height={66} className='rounded-full' />
+                        userImg && <Image
+                            src={userImg ?? "/assets/images/dummy.jpg"}
+                            alt="User Profile"
+                            width={66}
+                            height={66}
+                            className="rounded-full"
+                        />
+
                     }
                     <article>
                         <p className="sub-header">{subHeader}</p>
@@ -21,12 +29,7 @@ const Header = ({ subHeader, title, userImg }: SharedHeaderProps) => {
                         <Image src={"/assets/icons/upload.svg"} alt='upload' width={16} height={16} />
                         <span>Upload a video</span>
                     </Link>
-                    <div className='record'>
-                        <button className='primary-btn'>
-                            <Image src={ICONS.record} alt='record' width={16} height={16} />
-                            <span>Record a video</span>
-                        </button>
-                    </div>
+                    <RecordScreen />
                 </aside>
 
             </section>
